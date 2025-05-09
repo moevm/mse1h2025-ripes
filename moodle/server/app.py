@@ -1,13 +1,14 @@
+import logging
 import os
 import uuid
 import time
 from uuid import uuid4
 
 import requests
-import logging
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, redirect, url_for, Response, jsonify
 from oauthlib.oauth1 import Client
+from peewee import *
 from requests.exceptions import MissingSchema, ConnectionError
 from werkzeug.exceptions import HTTPException
 
@@ -19,8 +20,47 @@ app = Flask(
 )
 app.logger.setLevel(logging.INFO)
 
-# TODO (Kirill Karpunin): need to make a database for this or something else BUT NOT A DICT!!!!!!!!!!!!!
-sessions_dict: dict = {}
+db = PostgresqlDatabase(
+    database=os.getenv('POSTGRES_DB'),
+    user=os.getenv('POSTGRES_USER'),
+    password=os.getenv('POSTGRES_PASSWORD'),
+    host=os.getenv('POSTGRES_HOST'),
+    port=int(os.getenv('POSTGRES_PORT'))
+)
+
+
+class BaseModel(Model):
+    class Meta:
+        database = db
+
+
+class ConnectionMeta(BaseModel):
+    session_id = UUIDField(primary_key=True)
+    user_id = BigIntegerField()
+    full_name = CharField(max_length=1024)
+    email = CharField(max_length=256)
+    outcome_service_url = CharField(max_length=1024)
+    sourced_id = CharField(max_length=256)
+
+    class DoesNotExist(DoesNotExist):
+        pass
+
+    class Meta:
+        table_name = 'connection_meta'
+
+
+class Statistics(Model):
+    statistics_id = AutoField()
+    session_id = UUIDField()
+    status = CharField(max_length=8, default='NOT SENT')
+    grade = FloatField(default=0.00)
+
+    class DoesNotExist(DoesNotExist):
+        pass
+
+    class Meta:
+        database = db
+        table_name = 'statistics'  # Явное указание имени таблицы
 
 
 @app.route('/lti', methods=['POST'])
@@ -53,16 +93,9 @@ def lti_request() -> str | Response:
     lis_outcome_service_url = lti_data.get('lis_outcome_service_url')
     lis_result_sourcedid = lti_data.get('lis_result_sourcedid')
 
-    sessions_dict[session_id] = {
-        'lis_outcome_service_url': lis_outcome_service_url,
-        'lis_result_sourcedid': lis_result_sourcedid,
-        'user_id': user_id,
-        'full_name': full_name,
-        'email': email,
-        'course_title': course_title,
-        'roles': roles,
-        'ripes_data': None
-    }
+    with db.connection_context():
+        ConnectionMeta.create(session_id=session_id, user_id=int(user_id), full_name=full_name, email=email, outcome_service_url=lis_outcome_service_url,
+                              sourced_id=lis_result_sourcedid)
 
     return redirect(url_for("main_page", session_id=session_id))
 
@@ -91,12 +124,15 @@ def send_grade_to_moodle(session_id_str: str, grade_str: str) -> str | Response:
         app.logger.info(err_message)
         return render_error(err_message)
 
-    if session_id not in sessions_dict:
+    try:
+        connection_meta: ConnectionMeta = ConnectionMeta.get(ConnectionMeta.session_id == session_id)
+    except ConnectionMeta.DoesNotExist:
         err_message = f"invalid session id: {session_id}"
         app.logger.info(err_message)
         return render_error(err_message)
 
-    lis_outcome_service_url, lis_result_sourcedid = sessions_dict[session_id]
+    lis_outcome_service_url: str = str(connection_meta.outcome_service_url)
+    lis_result_sourcedid: str = str(connection_meta.sourced_id)
 
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
         <imsx_POXEnvelopeRequest xmlns="http://www.imsglobal.org/services/ltiv1p1/xsd/imsoms_v1p0">
@@ -152,6 +188,9 @@ def send_grade_to_moodle(session_id_str: str, grade_str: str) -> str | Response:
 
     if response.status_code == 200:
         app.logger.info("grade successfully sent to Moodle!")
+
+        with db.connection_context():
+            Statistics.create(session_id=session_id, status='SENT', grade=round(float(grade_str), 2))
     else:
         app.logger.info(f"failed to send grade. Status code: {response.status_code}")
 
@@ -174,12 +213,15 @@ def erase_grade_from_moodle(session_id_str: str) -> str | Response:
         app.logger.info(err_message)
         return render_error(err_message)
 
-    if session_id not in sessions_dict:
+    try:
+        connection_meta: ConnectionMeta = ConnectionMeta.get(ConnectionMeta.session_id == session_id)
+    except ConnectionMeta.DoesNotExist:
         err_message = f"invalid session id: {session_id}"
         app.logger.info(err_message)
         return render_error(err_message)
 
-    lis_outcome_service_url, lis_result_sourcedid = sessions_dict[session_id]
+    lis_outcome_service_url: str = str(connection_meta.outcome_service_url)
+    lis_result_sourcedid: str = str(connection_meta.sourced_id)
 
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
         <imsx_POXEnvelopeRequest xmlns="http://www.imsglobal.org/services/ltiv1p1/xsd/imsoms_v1p0">
@@ -229,6 +271,10 @@ def erase_grade_from_moodle(session_id_str: str) -> str | Response:
 
     if response.status_code == 200:
         app.logger.info("grade successfully deleted from Moodle!")
+
+        with db.connection_context():
+            Statistics.create(session_id=session_id, status='ERASED', grade=0.00)
+
     else:
         app.logger.info(f"failed to delete grade. Status code: {response.status_code}")
 
