@@ -2,9 +2,11 @@
 
 ## Сборка
 
-Для сборки созданы два docker файла:
-- [Файл сборки Ripes](../docker/ripes.wasm.dockerfile)
-- [Файл сборки сервера](../docker/server.dockerfile)
+Сборка состоит из двух этапов:
+- Сборка исходников Ripes
+  - [Файл сборки Ripes](../docker/ripes.wasm.dockerfile)
+- Сборка приложения через `docker compose`
+  - [Файл сборки приложения](../docker/docker-compose.yaml)
 
 Сборка проводится из корневой директории
 
@@ -17,29 +19,30 @@
 docker build --rm --tag ripes-wasm:latest -f ./docker/ripes.wasm.dockerfile .
 ```
 
-### Сборка сервера
+### Сборка приложения
 По умолчанию для сборки сервера используется [образ Ripes загруженный на docker.hub](https://hub.docker.com/r/jqnfxa/ripes.wasm/tags)
 
 Если необходимо использовать локально собранный Ripes, то замените в [файле сборки сервера](../docker/server.dockerfile) первую строчку с
 ```dockerfile
-FROM jqnfxa/ripes.wasm:1.0.0 AS wasm
+FROM jqnfxa/ripes.wasm:latest AS wasm
 ```
 на
 ```dockerfile
 FROM ripes-wasm AS wasm
 ```
 
-Для сборки server в консоли введите:
+Для сборки приложения в консоли введите:
 
 ```bash
-docker build -t server -f ./docker/server.dockerfile .
+docker compose -f ./docker/docker-compose.yaml build
 ```
 
 # Запуск
-Для запуска необходим файл окружения созданный в соответствии с [примером](../moodle/server/.env.example)
+Для запуска необходимы файлы окружения созданные в соответствии с примерами:
+- [env файл для сервисов БД](../docker/.env.example)
+- [env файл для приложения](../moodle/server/.env.example)
 
 Для запуска в консоль введите:
 ```bash
-# Заменить $PATH_TO_ENV_FILE на путь к файлу окружения
-docker run -p 5000:5000 --env-file $PATH_TO_ENV_FILE server
+docker compose -f ./docker/docker-compose.yaml build && docker compose -f ./docker/docker-compose.yaml up
 ```
