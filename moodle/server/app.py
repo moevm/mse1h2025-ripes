@@ -374,7 +374,8 @@ def capture_ripes_data(session_id_str: str):
             return jsonify({
                 "status": "error",
                 "message": message,
-                "send_grade_address": url_for('send_grade_to_moodle', session_id_str=session_id_str, grade_str=str(grade))
+                "send_grade_address": url_for('send_grade_to_moodle', session_id_str=session_id_str,
+                                              grade_str=str(grade))
             }), 500
 
         return jsonify({
