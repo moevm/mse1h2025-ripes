@@ -1,0 +1,17 @@
+name: Test task generator
+on: [ push, pull_request ]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checking out to the branch
+        uses: actions/checkout@v3
+      - name: Setting up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Run tests
+        run: |
+          cd moodle/server
+          pytest
