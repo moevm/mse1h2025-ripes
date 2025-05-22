@@ -24,7 +24,7 @@ docker build --rm --tag ripes-wasm:latest -f ./docker/ripes.wasm.dockerfile .
 
 Если необходимо использовать локально собранный Ripes, то замените в [файле сборки сервера](../docker/server.dockerfile) первую строчку с
 ```dockerfile
-FROM jqnfxa/ripes.wasm:latest AS wasm
+FROM jqnfxa/ripes-wasm:latest AS wasm
 ```
 на
 ```dockerfile
