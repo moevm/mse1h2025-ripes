@@ -32,3 +32,16 @@ class Task1(Task):
                 passed += 1
 
         return passed / len(self.tests)
+    
+    @property
+    def name(self) -> str:
+        name: str = 'a + b'
+        return name
+
+    @property
+    def description(self) -> str:
+        description: str = (
+            'Сложите два числа a и b, которые лежат в регистрах x1 и x2 соответственно.'
+            'Результат записать в x3.'
+        )
+        return description
