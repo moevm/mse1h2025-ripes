@@ -666,6 +666,12 @@ EM_JS(void, sendDataToFlask,
           registers : registersObj
         };
 
+        if (parent && typeof parent.showLoadingModal === 'function') {
+            parent.showLoadingModal('Проверка решения', 'Пожалуйста, подождите');
+        } else {
+            alert("Идет проверка решения");
+        }
+
         // Perform the fetch request
         fetch(targetUrl, {
           method : 'POST',
@@ -730,19 +736,19 @@ EM_JS(void, sendDataToFlask,
                                                 if (res.ok) {
                                                   setTimeout(() => {
                                                     if (parent && typeof parent.showModal === 'function') {
-                                                        parent.showModal('Ошибка', 'Оценка 0.0 отправлена на сервер.', 'error');
+                                                        parent.showModal('Статус', 'Оценка 0.0 отправлена на сервер.', 'info');
                                                     } else {
                                                         alert('Оценка 0.0 отправлена на сервер.');
                                                     }
-                                                  }, 5000);
+                                                  }, 3000);
                                                 } else {
                                                   setTimeout(() => {
                                                     if (parent && typeof parent.showModal === 'function') {
-                                                        parent.showModal('Ошибка', 'Отправить оценку не удалось.', 'error');
+                                                        parent.showModal('Ошибка', 'Отправить на сервер оценку 0.0 не удалось.', 'error');
                                                     } else {
                                                         alert('Отправить оценку не удалось');
                                                     }
-                                                  }, 5000);
+                                                  }, 3000);
                                                 }
                                 });
                            }
