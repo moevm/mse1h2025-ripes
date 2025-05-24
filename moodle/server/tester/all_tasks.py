@@ -5,7 +5,7 @@ from tester.task3 import Task3
 from tester.task4 import Task4
 
 
-all_tasks = {
+all_tasks: dict[str, Task] = {
     'SystemTaskID1': Task,
     'SystemTaskID2': Task1,
     'SystemTaskID3': Task2,

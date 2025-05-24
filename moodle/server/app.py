@@ -12,6 +12,7 @@ from oauthlib.oauth1 import Client
 from peewee import *
 from requests.exceptions import MissingSchema, ConnectionError
 from werkzeug.exceptions import HTTPException
+from typing import Optional
 
 from tester.all_tasks import get_task_by_id
 
@@ -318,17 +319,35 @@ def capture_ripes_data(session_id_str: str):
         return jsonify({"status": "error", "message": f"Internal server error: {str(e)}"}), 500
 
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/', methods=['GET'])
 def main_page() -> str:
-    session_id = request.args.get("session_id")
-    if request.method == 'POST':
-        app.logger.info('пришел POST')
-        return render_template("index.html", session_id=session_id)
-    elif request.method == 'GET':
-        app.logger.info('пришел GET')
-        return render_template("index.html", session_id=session_id)
+    if request.method == 'GET':
+        session_id: Optional[str] = request.args.get("session_id")
+        task_name: str = 'Задание'
+        task_description: str = 'Описание'
+
+        if session_id is not None:
+            try:
+                task_id: str = ConnectionMeta.get(ConnectionMeta.session_id == session_id).task_id
+                app.logger.info(f'Task ID: {task_id}')
+                task = get_task_by_id(task_id)(code_file=f"/tmp/{session_id}.s")
+                task_name = task.name
+                task_description = task.description
+                app.logger.info(task_name)
+
+            except ConnectionMeta.DoesNotExist:
+                app.logger.info(
+                    f'Can\'t get connection meta by session_id={session_id}, using standard template for index page'
+                )
+
+        return render_template(
+            "index.html",
+            session_id=session_id,
+            task_name=task_name,
+            task_description=task_description
+        )
     else:
-        app.logger.info('пришел не GET и не POST')
+        app.logger.info('пришел не GET')
         return render_error('Invalid request')
 
 @app.route('/statistic/<session_id_str>', methods=['GET'])

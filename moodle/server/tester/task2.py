@@ -33,3 +33,16 @@ class Task2(Task):
                 passed += 1
 
         return passed / len(self.tests)
+
+    @property
+    def name(self) -> str:
+        name: str = 'Наибольший общий делитель'
+        return name
+
+    @property
+    def description(self) -> str:
+        description: str = (
+            'Напишите алгоритм, вычисляющий НОД(a, b). '
+            'a и b записаны в регистрах x10 и x11 соответственно, результат записать в x10.'
+        )
+        return description
