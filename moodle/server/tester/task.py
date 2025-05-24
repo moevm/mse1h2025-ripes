@@ -30,3 +30,13 @@ class Task:
                 passed += 1
 
         return passed / len(self.tests)
+
+    @property
+    def name(self) -> str:
+        name: str = 'Название'
+        return name
+
+    @property
+    def description(self) -> str:
+        description: str = 'Описание'
+        return description

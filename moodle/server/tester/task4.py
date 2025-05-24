@@ -32,3 +32,17 @@ class Task4(Task):
                 passed += 1
 
         return passed / len(self.tests)
+
+    @property
+    def name(self) -> str:
+        name: str = 'Факториал числа'
+        return name
+
+    @property
+    def description(self) -> str:
+        description: str = (
+            'Напишите алгоритм, вычисляющий факториал числа n. '
+            'n записано в x10, результат записать в x10.'
+        )
+        return description
+
