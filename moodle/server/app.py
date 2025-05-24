@@ -44,6 +44,7 @@ class ConnectionMeta(BaseModel):
     user_id = BigIntegerField()
     full_name = CharField(max_length=1024)
     email = CharField(max_length=256)
+    roles = CharField(max_length=512)
     outcome_service_url = CharField(max_length=1024)
     sourced_id = CharField(max_length=256)
 
@@ -54,18 +55,31 @@ class ConnectionMeta(BaseModel):
         table_name = 'connection_meta'
 
 
-class Statistics(Model):
-    statistics_id = AutoField()
-    session_id = ForeignKeyField(ConnectionMeta, field='session_id', backref='statistics')
-    grade = FloatField(default=0.00)
-    send_timestamp = DateTimeField()
+class Events(BaseModel):
+    class EventType:
+        SESSION_OPENED = 'SESSION_OPENED'
+        GRADE_SENT = 'GRADE_SENT'
 
-    class DoesNotExist(DoesNotExist):
-        pass
+    event_id = BigAutoField(primary_key=True)
+    session_id = ForeignKeyField(ConnectionMeta, field='session_id', backref='events', on_delete='CASCADE')
+    event_type = CharField(choices=[
+        EventType.SESSION_OPENED,
+        EventType.GRADE_SENT
+    ])
+    event_timestamp = DateTimeField()
 
     class Meta:
-        database = db
-        table_name = 'statistics'  # Явное указание имени таблицы
+        table_name = 'events'
+
+
+class Grades(BaseModel):
+    grade_id = BigAutoField(primary_key=True)
+    event_id = ForeignKeyField(Events, field='event_id', backref='grades', on_delete='CASCADE')
+    grade_value = FloatField()
+    code = CharField(4096)
+
+    class Meta:
+        table_name = 'grades'
 
 
 @app.route('/lti', methods=['POST'])
@@ -103,14 +117,16 @@ def lti_request() -> str | Response:
 
     with db.connection_context():
         ConnectionMeta.create(session_id=session_id, task_id=task_id, course_title=course_title, user_id=int(user_id),
-                              full_name=full_name,
-                              email=email, outcome_service_url=lis_outcome_service_url, sourced_id=lis_result_sourcedid)
+                              full_name=full_name, email=email, roles=roles,
+                              outcome_service_url=lis_outcome_service_url, sourced_id=lis_result_sourcedid)
+
+        Events.create(session_id=session_id, event_type=Events.EventType.SESSION_OPENED, event_timestamp=datetime.now())
 
     return redirect(url_for("main_page", session_id=session_id))
 
 
-@app.route('/ripes/<session_id_str>/<grade_str>', methods=["POST"])
-def send_grade_to_moodle(session_id_str: str, grade_str: str) -> tuple[str, int] | Response:
+@app.route('/ripes/<session_id_str>/<grade_str>/<code>', methods=["POST"])
+def send_grade_to_moodle(session_id_str: str, grade_str: str, code: str) -> tuple[str, int] | Response:
     """
     Method for sending a grade to Moodle.
     Uses session ID to get a specific connection ID to set a grade for a correct student.
@@ -202,98 +218,10 @@ def send_grade_to_moodle(session_id_str: str, grade_str: str) -> tuple[str, int]
         app.logger.info("grade successfully sent to Moodle!")
 
         with db.connection_context():
-            Statistics.create(session_id=session_id, grade=round(float(grade_str), 2), send_timestamp=datetime.now())
+            evt = Events.create(session_id=session_id, event_type=Events.EventType.GRADE_SENT, event_timestamp=datetime.now())
+            Grades.create(event_id=evt.event_id, grade_value=round(float(grade_str), 2), code=code)
     else:
         err_message = f"failed to send grade. Status code: {response.status_code}"
-        app.logger.info(err_message)
-        return render_error(err_message), response.status_code
-
-    return redirect(url_for("main_page"))
-
-
-@app.route('/ripes/<session_id_str>/delete', methods=['DELETE'])
-def erase_grade_from_moodle(session_id_str: str) -> tuple[str, int] | Response:
-    """
-    Method for erasing a grade from Moodle.
-    Uses session ID to get a specific connection ID to erase a grade for a correct student.
-
-    :param session_id_str: String containing session ID.
-    :return: An error message if something went wrong, else a template rendering the page with Ripes.
-    """
-    if request.method != 'DELETE':
-        return render_error("Bad Request"), 400
-
-    try:
-        session_id = uuid.UUID(session_id_str)
-    except ValueError:
-        err_message = f"invalid uuid: {session_id_str}"
-        app.logger.info(err_message)
-        return render_error(err_message), 400
-
-    try:
-        connection_meta: ConnectionMeta = ConnectionMeta.get(ConnectionMeta.session_id == session_id)
-    except ConnectionMeta.DoesNotExist:
-        err_message = f"invalid session id: {session_id}"
-        app.logger.info(err_message)
-        return render_error(err_message), 400
-
-    lis_outcome_service_url: str = str(connection_meta.outcome_service_url)
-    lis_result_sourcedid: str = str(connection_meta.sourced_id)
-
-    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <imsx_POXEnvelopeRequest xmlns="http://www.imsglobal.org/services/ltiv1p1/xsd/imsoms_v1p0">
-            <imsx_POXHeader>
-                <imsx_POXRequestHeaderInfo>
-                    <imsx_version>V1.0</imsx_version>
-                    <imsx_messageIdentifier>{uuid.uuid4()}</imsx_messageIdentifier>
-                </imsx_POXRequestHeaderInfo>
-            </imsx_POXHeader>
-            <imsx_POXBody>
-                <deleteResultRequest>
-                    <resultRecord>
-                        <sourcedGUID>
-                            <sourcedId>{lis_result_sourcedid}</sourcedId>
-                        </sourcedGUID>
-                    </resultRecord>
-                </deleteResultRequest>
-            </imsx_POXBody>
-        </imsx_POXEnvelopeRequest>"""
-
-    LTI_KEY = os.getenv("LTI_KEY")
-    LTI_SECRET = os.getenv("LTI_SECRET")
-
-    if LTI_KEY is None or LTI_SECRET is None:
-        err_message = 'LTI consumer key or LTI shared secret are not set'
-        app.logger.info(err_message)
-        return render_error(err_message), 500
-
-    client = Client(LTI_KEY, LTI_SECRET)
-    uri, headers, body = client.sign(
-        lis_outcome_service_url,
-        http_method='POST',
-        body=xml,
-        headers={'Content-Type': 'application/xml'}
-    )
-
-    try:
-        response = requests.post(lis_outcome_service_url, data=body, headers=headers)
-    except MissingSchema:
-        err_message = f"invalid URL: {lis_outcome_service_url}"
-        app.logger.info(err_message)
-        return render_error(err_message), 500
-    except ConnectionError:
-        err_message = f"unable to connect: {lis_outcome_service_url}"
-        app.logger.info(err_message)
-        return render_error(err_message), 500
-
-    if response.status_code == 200:
-        app.logger.info("grade successfully deleted from Moodle!")
-
-        with db.connection_context():
-            Statistics.create(session_id=session_id, grade=0.00, send_timestamp=datetime.now())
-
-    else:
-        err_message = f"failed to delete grade. Status code: {response.status_code}"
         app.logger.info(err_message)
         return render_error(err_message), response.status_code
 
@@ -371,18 +299,18 @@ def capture_ripes_data(session_id_str: str):
             message = f"{message} grade: {grade}"
         except RuntimeError as e:
             app.logger.exception(f"Error during check run for session {session_id_str}: {e}")
-            grade = 0
-            message = "Error during run {e}"
+            grade = 0.0
+            message = f"Error during run: {e}"
             return jsonify({
                 "status": "error",
                 "message": message,
-                "send_grade_address": url_for('send_grade_to_moodle', session_id_str=session_id_str, grade_str=str(grade))
+                "send_grade_address": url_for('send_grade_to_moodle', session_id_str=session_id_str, grade_str=str(grade), code=code)
             }), 500
 
         return jsonify({
             "status": "success",
             "message": message,
-            "send_grade_address": url_for('send_grade_to_moodle', session_id_str=session_id_str, grade_str=str(grade))
+            "send_grade_address": url_for('send_grade_to_moodle', session_id_str=session_id_str, grade_str=str(grade), code=code)
         }), 200
 
     except Exception as e:
@@ -403,21 +331,41 @@ def main_page() -> str:
         app.logger.info('пришел не GET и не POST')
         return render_error('Invalid request')
 
-@app.route('/statistic', methods=['GET'])
-def statistic_page() -> str:
+@app.route('/statistic/<session_id_str>', methods=['GET'])
+def statistic_page(session_id_str: str) -> str:
     if request.method != 'GET':
         return render_error("Bad Request")
 
-    query = (
-        ConnectionMeta.select(
+    try:
+        session_id = uuid.UUID(session_id_str)
+    except ValueError:
+        err_message = f"invalid uuid: {session_id_str}"
+        app.logger.info(err_message)
+        return render_error(err_message)
+
+    conn = ConnectionMeta.select().where(ConnectionMeta.session_id == session_id)[0]
+    user_id = conn.user_id
+    task_id = conn.task_id
+
+    query = Events.select(
+        Events.event_timestamp,
         ConnectionMeta.full_name,
-            ConnectionMeta.user_id,
-            ConnectionMeta.course_title,
-            ConnectionMeta.task_id,
-            Statistics.grade,
-            Statistics.send_timestamp
-        ).join(Statistics).dicts()
-    )
+        ConnectionMeta.email,
+        ConnectionMeta.course_title,
+        ConnectionMeta.task_id,
+        Events.event_type,
+        Grades.grade_value,
+        Grades.code,
+        ).join(ConnectionMeta, on=(Events.session_id == ConnectionMeta.session_id)
+        ).join(Grades, JOIN.LEFT_OUTER, on=(Events.event_id == Grades.event_id)
+        ).order_by(Events.event_timestamp.desc())
+
+    query = query.where(ConnectionMeta.task_id == task_id)
+
+    if not 'administrator' in conn.roles.lower():
+        query = query.where(ConnectionMeta.user_id == user_id)
+
+    query = query.dicts()
 
     return render_template('statistics.html', data=json.dumps(list(query), default=str, ensure_ascii=False))
 

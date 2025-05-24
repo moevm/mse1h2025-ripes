@@ -1,78 +1,46 @@
-function server_get_request() {
-    alert('GET-запрос отправлен')
-    fetch('/', {
-        method: 'GET'
-    }).then((res) => {
-        if (res.ok) {
-            alert('GET-запрос успешно обработан')
-        } else {
-            alert('При обработке GET-запроса произошла ошибка')
-        }
-    })
-}
+function showModal(title, message, type = 'info') { 
+    $('.ui.modal.app-notification-modal').remove();
 
-function server_post_request() {
-    alert('POST-запрос отправлен')
-    fetch('/', {
-        method: 'POST'
-    }).then((res) => {
-        if (res.ok) {
-            alert('POST-запрос успешно обработан')
-        } else {
-            alert('При обработке POST-запроса произошла ошибка')
-        }
-    })
-}
+    const modalId = 'app-notification-modal-' + Date.now(); 
+    let iconHtml = '';
+    let buttonClass = 'blue'; 
 
-function send_grade_to_moodle(session_id) {
-    if (session_id === 'None') {
-        alert('Вы не авторизовались через Moodle')
-        return
+    switch (type) {
+        case 'success':
+            iconHtml = '<i class="check circle outline green icon"></i> ';
+            buttonClass = 'green';
+            break;
+        case 'error':
+            iconHtml = '<i class="times circle outline red icon"></i> ';
+            buttonClass = 'red';
+            break;
+        case 'info':
+            iconHtml = '<i class="info circle blue icon"></i> ';
+            buttonClass = 'blue';
+            break;
     }
 
-    if (session_id.trim() === '') {
-        alert('Не указан ID сессии')
-        return
-    }
+    const headerContent = `${iconHtml}${title}`;
+    const modalHtml = `
+        <div class="ui mini modal app-notification-modal" id="${modalId}">
+            <div class="header">${headerContent}</div>
+            <div class="content">
+                <p>${message}</p>
+            </div>
+            <div class="actions">
+                <div class="ui ${buttonClass} ok button">OK</div>
+            </div>
+        </div>
+    `;
 
-    const grade = document.getElementById("slider_value").textContent
-
-    fetch('/ripes/' + session_id + '/' + grade, {
-        method: 'POST'
-    }).then((res) => {
-        if (res.ok) {
-            alert('Оценка отправлена')
-        } else {
-            alert('Отправить оценку не удалось')
-        }
-    })
-}
-
-function delete_grade_from_moodle(session_id) {
-    if (session_id === 'None') {
-        alert('Вы не авторизовались через Moodle')
-        return
-    }
-
-    if (session_id.trim() === '') {
-        alert('Не указан ID сессии')
-        return
-    }
-
-    const grade = document.getElementById("slider_value").textContent
-
-    fetch('/ripes/' + session_id + '/delete', {
-        method: 'DELETE'
-    }).then((res) => {
-        if (res.ok) {
-            alert('Оценка удалена')
-        } else {
-            alert('Удалить оценку не удалось')
-        }
-    })
-}
-
-function update_slider_value(value) {
-    const float_value = value / 10
-    document.getElementById("slider_value").textContent = float_value.toFixed(1);
+    $(document.body).append(modalHtml);
+    $('#' + modalId)
+        .modal({
+            closable: true, 
+            onHidden: function() {
+                
+                $(this).remove();
+            }
+        })
+        .modal('show');
 }
