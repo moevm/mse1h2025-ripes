@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS connection_meta (
     session_id UUID PRIMARY KEY,
     task_id VARCHAR(256) NOT NULL,
+    random_seed VARCHAR(256) NOT NULL,
     course_title VARCHAR(512) NOT NULL,
     user_id BIGINT NOT NULL,
     full_name VARCHAR(1024) NOT NULL,
