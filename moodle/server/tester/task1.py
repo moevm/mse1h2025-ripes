@@ -1,10 +1,17 @@
 from tester.task import Task
+from tester.ripes_tester import regs_dict
 import random
 
 
 class Task1(Task):
-    def __init__(self, code_file):
-        super().__init__(code_file, regs=True)
+    def __init__(self, code_file, random_seed):
+        super().__init__(code_file, random_seed, regs=True)
+        regs = list(regs_dict.values())
+        self.a_reg = random.choice(regs)
+        self.b_reg = random.choice(regs)
+        regs.remove('x17')
+        self.res_reg = random.choice(regs)
+
         self.tests = self.__generate_tests()
 
     def __generate_tests(self) -> list[dict]:
@@ -14,16 +21,16 @@ class Task1(Task):
             b = random.randint(0, 10)
             test = {
                 "input": None,
-                "reginit": {'x1': a, 'x2': b},
+                "reginit": {self.a_reg: a, self.b_reg: b},
                 "expected": "",
-                "expected_regs": {'x3': a + b}
+                "expected_regs": {self.res_reg: a + b}
             }
             tests.append(test)
         return tests
 
     def __check_test(self, test: dict) -> bool:
         res = self.tester.run(test["input"], test["reginit"])
-        return int(res['report']['registers']['x3']) == test["expected_regs"]['x3']
+        return int(res['report']['registers'][self.res_reg]) == test["expected_regs"][self.res_reg]
     
     def run(self) -> float:
         passed = 0
@@ -41,7 +48,7 @@ class Task1(Task):
     @property
     def description(self) -> str:
         description: str = (
-            'Сложите два числа a и b, которые лежат в регистрах x1 и x2 соответственно.'
-            'Результат записать в x3.'
+            f'Сложите два числа a и b, которые лежат в регистрах {self.a_reg} и {self.b_reg} соответственно.'
+            f'Результат записать в {self.res_reg}.'
         )
         return description
