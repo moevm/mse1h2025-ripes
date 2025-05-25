@@ -6,6 +6,7 @@ class Task:
     def __init__(self, code_file, random_seed, **kwargs) -> None:
         self.tester = Tester(code_file=code_file, **kwargs)
         seed(random_seed)
+        self.tests = self.__generate_tests()
 
     def __generate_tests(self) -> list[dict]:
         tests = [
