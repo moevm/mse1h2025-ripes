@@ -34,10 +34,10 @@ class Task:
 
     @property
     def name(self) -> str:
-        name: str = 'Название'
+        name: str = 'Тестовая задача'
         return name
 
     @property
     def description(self) -> str:
-        description: str = 'Описание'
+        description: str = 'Чтобы получить полный балл в этой задаче программа должна успешно завершиться.'
         return description
