@@ -423,7 +423,4 @@ def after_request(response):
 
 
 if __name__ == '__main__':
-    with db.connection_context():
-        ConnectionMeta.drop_table()
-        ConnectionMeta.create_table()
     app.run(debug=True)
