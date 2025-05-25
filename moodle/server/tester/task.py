@@ -1,10 +1,11 @@
 from tester.ripes_tester import Tester
+from random import seed
 
 
 class Task:
-    def __init__(self, code_file, **kwargs) -> None:
+    def __init__(self, code_file, random_seed, **kwargs) -> None:
         self.tester = Tester(code_file=code_file, **kwargs)
-        self.tests = self.__generate_tests()
+        seed(random_seed)
 
     def __generate_tests(self) -> list[dict]:
         tests = [
