@@ -1,9 +1,11 @@
 from tester.ripes_tester import Tester
+from random import seed
 
 
 class Task:
-    def __init__(self, code_file, **kwargs) -> None:
+    def __init__(self, code_file, random_seed, **kwargs) -> None:
         self.tester = Tester(code_file=code_file, **kwargs)
+        seed(random_seed)
         self.tests = self.__generate_tests()
 
     def __generate_tests(self) -> list[dict]:
@@ -30,3 +32,13 @@ class Task:
                 passed += 1
 
         return passed / len(self.tests)
+
+    @property
+    def name(self) -> str:
+        name: str = 'Тестовая задача'
+        return name
+
+    @property
+    def description(self) -> str:
+        description: str = 'Чтобы получить полный балл в этой задаче программа должна успешно завершиться.'
+        return description

@@ -44,3 +44,35 @@ function showModal(title, message, type = 'info') {
         })
         .modal('show');
 }
+
+function showLoadingModal(title, message) {
+    $('.ui.modal.app-notification-modal').remove();
+
+    const modalId = 'app-notification-modal-' + Date.now();
+    const iconHtml = '<i class="tools icon"></i> ';
+    const buttonClass = 'grey';
+
+    const headerContent = `${iconHtml}${title}`;
+    const modalHtml = `
+        <div class="ui mini modal app-notification-modal" id="${modalId}">
+            <div class="header">${headerContent}</div>
+            <div class="content">
+                <p>${message}</p>
+                <div class="ui active grey centered inline loader"></div>
+            </div>
+        </div>
+    `;
+
+    $(document.body).append(modalHtml);
+    $('#' + modalId)
+        .modal({
+            closable: false,
+            dimmerSettings: {
+                closable: false
+            },
+            onHidden: function() {
+                $(this).remove();
+            }
+        })
+        .modal('show');
+}

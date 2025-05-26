@@ -12,6 +12,7 @@ from oauthlib.oauth1 import Client
 from peewee import *
 from requests.exceptions import MissingSchema, ConnectionError
 from werkzeug.exceptions import HTTPException
+from typing import Optional
 
 from tester.all_tasks import get_task_by_id
 
@@ -40,6 +41,7 @@ class BaseModel(Model):
 class ConnectionMeta(BaseModel):
     session_id = UUIDField(primary_key=True)
     task_id = CharField(max_length=256)
+    random_seed = CharField(max_length=256)
     course_title = CharField(max_length=512)
     user_id = BigIntegerField()
     full_name = CharField(max_length=1024)
@@ -101,11 +103,13 @@ def lti_request() -> str | Response:
     course_title = lti_data.get('context_title', 'No course title')
     roles = lti_data.get('roles', 'No user roles')
     task_id = lti_data.get('custom_task_id', '0')
+    random_seed = lti_data.get('custom_seed', user_id)
 
     session_id = uuid4()
 
     app.logger.info(f"Session ID: {session_id}")
     app.logger.info(f"Task ID: {task_id}")
+    app.logger.info(f"Random Seed: {random_seed}")
     app.logger.info(f"User ID: {user_id}")
     app.logger.info(f"Full Name: {full_name}")
     app.logger.info(f"Email: {email}")
@@ -116,8 +120,8 @@ def lti_request() -> str | Response:
     lis_result_sourcedid = lti_data.get('lis_result_sourcedid')
 
     with db.connection_context():
-        ConnectionMeta.create(session_id=session_id, task_id=task_id, course_title=course_title, user_id=int(user_id),
-                              full_name=full_name, email=email, roles=roles,
+        ConnectionMeta.create(session_id=session_id, task_id=task_id, random_seed=random_seed, course_title=course_title, 
+                              user_id=int(user_id), full_name=full_name, email=email, roles=roles,
                               outcome_service_url=lis_outcome_service_url, sourced_id=lis_result_sourcedid)
 
         Events.create(session_id=session_id, event_type=Events.EventType.SESSION_OPENED, event_timestamp=datetime.now())
@@ -290,7 +294,8 @@ def capture_ripes_data(session_id_str: str):
             f.write(code)
 
         task_id: str = str(connection_meta.task_id)
-        task = get_task_by_id(task_id)(code_file=f"/tmp/{session_id_str}.s")
+        random_seed: str = str(connection_meta.random_seed)
+        task = get_task_by_id(task_id)(code_file=f"/tmp/{session_id_str}.s", random_seed=random_seed)
         message = "Success run"
         try:
             app.logger.info(f"start check")
@@ -318,17 +323,36 @@ def capture_ripes_data(session_id_str: str):
         return jsonify({"status": "error", "message": f"Internal server error: {str(e)}"}), 500
 
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/', methods=['GET'])
 def main_page() -> str:
-    session_id = request.args.get("session_id")
-    if request.method == 'POST':
-        app.logger.info('пришел POST')
-        return render_template("index.html", session_id=session_id)
-    elif request.method == 'GET':
-        app.logger.info('пришел GET')
-        return render_template("index.html", session_id=session_id)
+    if request.method == 'GET':
+        session_id: Optional[str] = request.args.get("session_id")
+        task_name: str = 'Задание'
+        task_description: str = 'Описание'
+
+        if session_id is not None:
+            try:
+                task_id: str = ConnectionMeta.get(ConnectionMeta.session_id == session_id).task_id
+                random_seed: str = ConnectionMeta.get(ConnectionMeta.session_id == session_id).random_seed
+                app.logger.info(f'Task ID: {task_id}')
+                task = get_task_by_id(task_id)(code_file=f"/tmp/{session_id}.s", random_seed=random_seed)
+                task_name = task.name
+                task_description = task.description
+                app.logger.info(task_name)
+
+            except ConnectionMeta.DoesNotExist:
+                app.logger.info(
+                    f'Can\'t get connection meta by session_id={session_id}, using standard template for index page'
+                )
+
+        return render_template(
+            "index.html",
+            session_id=session_id,
+            task_name=task_name,
+            task_description=task_description
+        )
     else:
-        app.logger.info('пришел не GET и не POST')
+        app.logger.info('пришел не GET')
         return render_error('Invalid request')
 
 @app.route('/statistic/<session_id_str>', methods=['GET'])
